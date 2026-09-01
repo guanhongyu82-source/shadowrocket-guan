@@ -1,2 +1,6 @@
 # shadowrocket-guan
-Personal Shadowrocket config (private)
+
+个人小飞机配置。私有仓。不含节点、不含订阅链接。
+
+- 配置文件：`guan.conf`
+- 小飞机用 URL 添加；只读口令写在手机本地，不要提交进仓库。
