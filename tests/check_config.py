@@ -52,7 +52,7 @@ def match(rules, domain, cn=False):
 def main():
     old, new = sections(OLD), sections(NEW)
     assert set(old) == set(new) == {"General", "Proxy Group", "Rule", "URL Rewrite"}
-    for section in ("General", "Proxy Group", "URL Rewrite"):
+    for section in ("General", "URL Rewrite"):
         assert old[section] == new[section], section + " unexpectedly changed"
     assert [x for x in new["Rule"] if x not in ADDED] == old["Rule"], "Existing rule order changed"
     assert len(new["Rule"]) - len(old["Rule"]) == len(ADDED)
@@ -66,9 +66,35 @@ def main():
         name = name.strip()
         assert name not in groups
         groups[name] = [x.strip() for x in definition.split(",")]
+    baseline = sections(ROOT / "archive/guan-20261109.conf")
+    for section in ("General", "Rule", "URL Rewrite"):
+        assert new[section] == baseline[section], section + " changed from published baseline"
+    baseline_groups = {}
+    for line in baseline["Proxy Group"]:
+        name, definition = line.split("=", 1)
+        baseline_groups[name.strip()] = [x.strip() for x in definition.split(",")]
+    for name, definition in baseline_groups.items():
+        if name != "ChatGPT":
+            assert groups[name] == definition, name + " unexpectedly changed"
+    assert groups["ChatGPT"][:5] == ["fallback", "ChatGPT-香港", "ChatGPT-日本", "ChatGPT-新加坡", "ChatGPT-美国"]
+    assert groups["ChatGPT"][5:] == [
+        item.replace("interval=600", "interval=180") for item in baseline_groups["ChatGPT"][5:]
+    ]
+    for region in ("香港", "日本", "新加坡", "美国"):
+        assert groups["ChatGPT-" + region] == [
+            item.replace("interval=600", "interval=180") for item in baseline_groups["奶昔-" + region]
+        ], "Candidate filtering or transport changed"
+        assert "hidden=1" in groups["ChatGPT-" + region]
+    assert set(groups) == set(baseline_groups) | {"ChatGPT-香港", "ChatGPT-日本", "ChatGPT-新加坡", "ChatGPT-美国"}
     for group in ("ChatGPT", "xai", "官"):
-        assert groups[group][:5] == ["fallback", "奶昔-香港", "奶昔-日本", "奶昔-新加坡", "奶昔-美国"]
         assert "狗狗" not in groups[group]
+    def check_cycles(name, stack):
+        assert name not in stack, "Cyclic group reference"
+        for member in groups[name][1:]:
+            if member in groups:
+                check_cycles(member, stack | {name})
+    for name in groups:
+        check_cycles(name, set())
     for parts in groups.values():
         assert parts[0] in ("select", "fallback")
         for member in parts[1:]:
@@ -108,7 +134,7 @@ def main():
     assert "[Proxy]" not in text and "[MITM]" not in text and "[Script]" not in text
     assert not re.search(r"(?i)(?:password|authorization|access_token)\s*[:=]", text)
     print(f"PASS: {len(ADDED)} allowlisted additions; {len(route_cases) * 2} routing checks; "
-          f"{len(probes - changed_hosts) * 2} unchanged-domain checks; groups/General/rewrite preserved")
+          f"{len(probes - changed_hosts) * 2} unchanged-domain checks; ChatGPT interval=180 isolated; other groups/General/Rule/rewrite preserved")
 
 if __name__ == "__main__":
     main()
